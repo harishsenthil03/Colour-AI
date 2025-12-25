@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Color Game Analyzer – AI PRO</title>
+<style>
+body{font-family:Arial;background:#f3f4f6;padding:14px}
+.card{background:#fff;padding:12px;margin-bottom:12px;border-radius:10px;box-shadow:0 2px 6px #0001}
+.badge{padding:6px 10px;color:#fff;border-radius:6px;margin:3px;display:inline-block;font-weight:bold}
+.red{background:#ef4444}
+.green{background:#22c55e}
+.blue{background:#3b82f6}
+.yellow{background:#facc15;color:#000}
+.black{background:#111}
+.white{background:#9ca3af}
+
+.result-btn{padding:10px 18px;margin:6px;border:none;border-radius:10px;color:#fff;font-weight:bold;font-size:15px;cursor:pointer}
+
+.signal-box{padding:12px;border-radius:10px;font-size:18px;font-weight:bold;color:#fff;text-align:center}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border:1px solid #ddd;padding:6px;text-align:center}
+th{background:#e5e7eb}
+
+.win{color:green;font-weight:bold}
+.loss{color:red;font-weight:bold}
+</style>
+</head>
+
+<body>
+
+<h2>🎯 Color Game Analyzer – AI PRO</h2>
+
+<div class="card">
+Serial Start:
+<input id="startSerial" type="number" value="1">
+<button onclick="setSerial()">SET</button><br><br>
+
+Capital ₹:
+<input id="capital" type="number" value="1000">
+Base Bet %:
+<input id="baseBet" type="number" value="2">
+Safe Loss Limit:
+<input id="safeLimit" type="number" value="3"><br><br>
+
+Current Level: <b id="level">1</b>
+</div>
+
+<div class="card">
+<select id="game" onchange="changeGame()">
+<option value="RG">Red / Green</option>
+<option value="BY">Blue / Yellow</option>
+<option value="BW">Black / White</option>
+</select>
+
+<div id="signalBox" class="signal-box" style="margin-top:10px">
+WAITING
+</div>
+
+<p>
+Pattern: <b id="reason">-</b><br>
+Confidence: <b id="confidence">-</b><br>
+Probability: <b id="probability">0%</b><br>
+Suggested Bet ₹: <b id="bet">0</b>
+</p>
+</div>
+
+<div class="card">
+<h4>🎮 Select Result</h4>
+<div id="buttons"></div>
+</div>
+
+<div class="card">
+<h4>📊 Pattern Accuracy</h4>
+<div id="accuracy"></div>
+</div>
+
+<div class="card">
+<h4>📜 History</h4>
+<table>
+<thead>
+<tr>
+<th>Serial</th>
+<th>Signal</th>
+<th>Result</th>
+<th>Pattern</th>
+<th>Conf</th>
+<th>Accuracy%</th>
+<th>Bet</th>
+</tr>
+</thead>
+<tbody id="history"></tbody>
+</table>
+</div>
+
+<script>
+let data={RG:[],BY:[],BW:[]};
+let game="RG";
+let serial=1;
+let level=1;
+let loss=0;
+let patternStats={};
+
+const rules=[
+{name:"AB",rule:/^(AB){3,}$/,next:"A",w:60},
+{name:"AABB",rule:/^(AABB){2,}$/,next:"A",w:70},
+{name:"AAABBB",rule:/^(AAABBB)+$/,next:"A",w:80},
+{name:"BLOCK",rule:/A{3,}B{3,}$/,next:"A",w:75},
+{name:"BLOCK-R",rule:/B{3,}A{3,}$/,next:"B",w:75}
+];
+
+function colors(){
+ if(game==="RG")return["Red","Green"];
+ if(game==="BY")return["Blue","Yellow"];
+ return["Black","White"];
+}
+
+function mapAB(arr){
+ let c=colors();
+ return arr.map(x=>x===c[0]?"A":"B").join("");
+}
+
+function ai(){
+ let h=data[game].slice(-12);
+ let c=colors();
+ if(h.length<3) return {pick:c[0],conf:"LOW",prob:30,reason:"NO DATA"};
+
+ let ab=mapAB(h);
+ for(let r of rules){
+  if(r.rule.test(ab)){
+   let pick=r.next==="A"?c[0]:c[1];
+   let prob=r.w;
+   let conf=prob>=70?"HIGH":"MEDIUM";
+   return {pick,conf,prob,reason:r.name};
+  }
+ }
+ return {pick:c[0],conf:"LOW",prob:35,reason:"TREND"};
+}
+
+function calcBet(conf){
+ let cap=+capital.value;
+ let base=+baseBet.value/100;
+ let safe=+safeLimit.value;
+ if(conf==="LOW"||loss>=safe) return 0;
+ return Math.round(cap*base*Math.pow(1.4,loss));
+}
+
+function submit(res){
+ let a=ai();
+ let bet=calcBet(a.conf);
+
+ if(!patternStats[a.reason])
+  patternStats[a.reason]={t:0,w:0};
+
+ patternStats[a.reason].t++;
+ if(res===a.pick){
+  patternStats[a.reason].w++;
+  loss=0;level=1;
+ }else{
+  loss++;level++;
+ }
+
+ let acc=Math.round(patternStats[a.reason].w/patternStats[a.reason].t*100);
+
+ history.innerHTML=
+ `<tr>
+ <td>${serial}</td>
+ <td>${a.pick}</td>
+ <td class="${res===a.pick?"win":"loss"}">${res}</td>
+ <td>${a.reason}</td>
+ <td>${a.conf}</td>
+ <td>${acc}%</td>
+ <td>${bet}</td>
+ </tr>`+history.innerHTML;
+
+ data[game].push(res);
+ serial++;
+ level.innerText=level;
+ update();
+}
+
+function update(){
+ let a=ai();
+ let box=document.getElementById("signalBox");
+ box.innerText=a.pick+" SIGNAL";
+ box.className="signal-box "+a.pick.toLowerCase();
+
+ confidence.innerText=a.conf;
+ probability.innerText=a.prob+"%";
+ reason.innerText=a.reason;
+ bet.innerText=calcBet(a.conf);
+
+ accuracy.innerHTML="";
+ for(let k in patternStats){
+  let p=patternStats[k];
+  accuracy.innerHTML+=`<span class="badge blue">${k} : ${Math.round(p.w/p.t*100)}%</span>`;
+ }
+
+ buttons.innerHTML="";
+ colors().forEach(c=>{
+  buttons.innerHTML+=`<button class="result-btn ${c.toLowerCase()}" onclick="submit('${c}')">${c}</button>`;
+ });
+}
+
+function changeGame(){game=gameSel.value;update()}
+function setSerial(){serial=+startSerial.value||1;alert("Serial Set")}
+
+update();
+</script>
+</body>
+</html>
