@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Color Game AI Analyzer PRO</title>
+<style>
+body{font-family:Arial;background:#f1f5f9;padding:12px}
+.card{background:#fff;padding:12px;margin-bottom:12px;border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,0.08)}
+.badge{padding:6px 10px;color:#fff;border-radius:6px;margin:3px;display:inline-block;font-weight:bold}
+.red{background:#ef4444}
+.green{background:#22c55e}
+.blue{background:#3b82f6}
+.yellow{background:#facc15;color:#000}
+.black{background:#111}
+.white{background:#6b7280}
+.signal-box{padding:12px;border-radius:10px;color:#fff;font-size:20px;font-weight:bold;text-align:center;margin:8px 0}
+.result-btn{padding:12px 18px;margin:6px;border:none;border-radius:10px;color:#fff;font-weight:bold;font-size:16px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{border:1px solid #ccc;padding:6px;text-align:center}
+th{background:#e5e7eb}
+.win{color:green;font-weight:bold}
+.loss{color:red;font-weight:bold}
+.low{background:#fee2e2}
+.med{background:#fef9c3}
+.high{background:#dcfce7}
+</style>
+</head>
+<body>
+
+<h2>🤖 Color Game AI Analyzer PRO</h2>
+
+<div class="card">
+Capital ₹ <input id="capital" type="number" value="1000">
+Base Bet % <input id="baseBet" type="number" value="2">
+Safe Loss <input id="safeLimit" type="number" value="3">
+</div>
+
+<div class="card">
+<select id="game" onchange="changeGame()">
+<option value="RG">Red / Green</option>
+<option value="BY">Blue / Yellow</option>
+<option value="BW">Black / White</option>
+</select>
+
+<div id="signalBox" class="signal-box">WAITING</div>
+
+<p>
+Pattern: <b id="reason">-</b><br>
+Confidence: <b id="confidence">-</b><br>
+Probability: <b id="probability">0%</b><br>
+Suggested Bet ₹: <b id="bet">0</b>
+</p>
+</div>
+
+<div class="card">
+<h4>🎮 Select Result</h4>
+<div id="buttons"></div>
+</div>
+
+<div class="card">
+<h4>📊 Pattern Accuracy (REAL)</h4>
+<table>
+<thead><tr><th>Pattern</th><th>Wins</th><th>Total</th><th>Accuracy %</th></tr></thead>
+<tbody id="accuracyTable"></tbody>
+</table>
+</div>
+
+<div class="card">
+<h4>📜 History</h4>
+<table>
+<thead><tr><th>#</th><th>Signal</th><th>Result</th><th>Pattern</th><th>Conf</th></tr></thead>
+<tbody id="history"></tbody>
+</table>
+</div>
+
+<script>
+let data={RG:[],BY:[],BW:[]},game="RG";
+let patternStats={},loss=0,serial=1,history=[];
+
+function colors(){
+ if(game==="RG")return["Red","Green"];
+ if(game==="BY")return["Blue","Yellow"];
+ return["Black","White"];
+}
+function mapAB(arr){
+ let c=colors();
+ return arr.map(x=>x===c[0]?"A":"B").join("");
+}
+
+const patterns=[
+ {name:"AB",rule:/^(AB){3,}$/,next:"A"},
+ {name:"AABB",rule:/^(AABB){2,}$/,next:"A"},
+ {name:"AAABBB",rule:/^(AAABBB)+$/,next:"A"},
+ {name:"BLOCK",rule:/A{3,}B{3,}$/,next:"A"},
+ {name:"BLOCK-R",rule:/B{3,}A{3,}$/,next:"B"}
+];
+
+function aiPredict(){
+ let h=data[game].slice(-20);
+ let c=colors();
+ if(h.length<6) return {pick:c[0],conf:"LOW",prob:30,reason:"INSUFFICIENT"};
+
+ let ab=mapAB(h);
+ for(let p of patterns){
+  if(p.rule.test(ab)){
+   let pick=p.next==="A"?c[0]:c[1];
+   let stat=patternStats[p.name];
+   let acc=stat?Math.round(stat.wins/stat.total*100):60;
+   let conf=acc>=70?"HIGH":acc>=45?"MEDIUM":"LOW";
+   return {pick,conf,prob:acc,reason:p.name};
+  }
+ }
+ return {pick:c[0],conf:"LOW",prob:35,reason:"NO PATTERN"};
+}
+
+function calcBet(conf){
+ if(conf==="LOW") return 0;
+ let cap=+capital.value;
+ let base=+baseBet.value/100;
+ if(loss>=+safeLimit.value) return 0;
+ return Math.round(cap*base*Math.pow(1.5,loss));
+}
+
+function submit(res){
+ data[game].push(res);
+ let s=aiPredict();
+ let bet=calcBet(s.conf);
+
+ if(!patternStats[s.reason]) patternStats[s.reason]={wins:0,total:0};
+ patternStats[s.reason].total++;
+ if(res===s.pick) patternStats[s.reason].wins++;
+
+ if(res===s.pick) loss=0; else loss++;
+
+ history.unshift(`<tr class="${s.conf==="HIGH"?"high":s.conf==="MEDIUM"?"med":"low"}">
+ <td>${serial++}</td><td>${s.pick}</td><td>${res}</td><td>${s.reason}</td><td>${s.conf}</td></tr>`);
+
+ history=history.slice(0,30);
+ document.getElementById("history").innerHTML=history.join("");
+ update();
+}
+
+function update(){
+ let s=aiPredict();
+ let box=document.getElementById("signalBox");
+ box.innerText=s.pick+" SIGNAL";
+ box.className="signal-box "+s.pick.toLowerCase();
+
+ confidence.innerText=s.conf;
+ probability.innerText=s.prob+"%";
+ reason.innerText=s.reason;
+ bet.innerText=calcBet(s.conf);
+
+ let rows="";
+ for(let k in patternStats){
+  let st=patternStats[k];
+  let acc=Math.round(st.wins/st.total*100);
+  rows+=`<tr><td>${k}</td><td>${st.wins}</td><td>${st.total}</td><td>${acc}%</td></tr>`;
+ }
+ accuracyTable.innerHTML=rows;
+
+ renderButtons();
+}
+
+function renderButtons(){
+ buttons.innerHTML="";
+ colors().forEach(c=>{
+  buttons.innerHTML+=`<button class="result-btn ${c.toLowerCase()}" onclick="submit('${c}')">${c}</button>`;
+ });
+}
+function changeGame(){update();}
+
+renderButtons();update();
+</script>
+</body>
+</html>
