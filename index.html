@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Color Game AI Analyzer – FULL UPGRADE</title>
+
+<style>
+body{font-family:Arial;background:#f3f4f6;padding:15px}
+.card{background:#fff;padding:12px;margin-bottom:12px;border-radius:10px}
+.badge{padding:6px 10px;color:#fff;border-radius:6px;margin:3px;display:inline-block}
+.red{background:#ef4444}
+.green{background:#22c55e}
+.blue{background:#3b82f6}
+.yellow{background:#facc15;color:#000}
+.black{background:#111}
+.white{background:#6b7280}
+.result-btn{padding:12px 18px;margin:6px;border:none;border-radius:10px;
+color:#fff;font-weight:bold;font-size:15px;cursor:pointer;opacity:0.4}
+.activeSignal{opacity:1;box-shadow:0 0 10px #000}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border:1px solid #ccc;padding:6px;text-align:center}
+th{background:#e5e7eb}
+.win{color:#16a34a;font-weight:bold}
+.loss{color:#dc2626;font-weight:bold}
+.low{background:#fee2e2}
+.medium{background:#fef9c3}
+.high{background:#dcfce7}
+</style>
+</head>
+
+<body>
+
+<h2>🎯 Color Game Analyzer – REAL AI</h2>
+
+<div class="card">
+<b>Serial Start:</b>
+<input id="startSerial" type="number" value="1">
+<button onclick="setSerial()">SET</button>
+<br><br>
+Capital ₹ <input id="capital" type="number" value="1000">
+Base Bet % <input id="baseBet" type="number" value="2">
+Safe Loss <input id="safeLimit" type="number" value="3">
+<br><br>
+<b>Confidence Filter:</b>
+<select id="confFilter">
+<option value="ALL">ALL</option>
+<option value="MEDIUM">MEDIUM+</option>
+<option value="HIGH">HIGH ONLY</option>
+</select>
+</div>
+
+<div class="card">
+<select id="game" onchange="changeGame()">
+<option value="RG">Red / Green</option>
+<option value="BY">Blue / Yellow</option>
+<option value="BW">Black / White</option>
+</select>
+
+<p>
+AI Signal: <b id="signal">-</b><br>
+Pattern: <b id="reason">-</b><br>
+Confidence: <b id="confidence">-</b><br>
+Probability: <b id="probability">0%</b><br>
+Suggested Bet ₹: <b id="suggestBet">0</b>
+</p>
+</div>
+
+<div class="card">
+<h4>🎮 Result Input</h4>
+<div id="resultButtons"></div>
+</div>
+
+<div class="card">
+<h4>📊 Pattern Accuracy</h4>
+<table>
+<thead>
+<tr><th>Pattern</th><th>Accuracy %</th><th>Wins</th><th>Total</th></tr>
+</thead>
+<tbody id="patternTable"></tbody>
+</table>
+</div>
+
+<div class="card">
+<h4>📜 History</h4>
+<table>
+<thead>
+<tr>
+<th>Serial</th><th>Time</th><th>Game</th>
+<th>Signal</th><th>Result</th>
+<th>Pattern</th><th>Conf</th><th>Prob</th><th>Status</th>
+</tr>
+</thead>
+<tbody id="history"></tbody>
+</table>
+</div>
+
+<script>
+let data={RG:[],BY:[],BW:[]}
+let game="RG"
+let serialNo=1
+let consecutiveLoss=0
+let patternStats={}
+let history=[]
+
+const patterns=[
+{name:"AB",rule:/^(AB){3,}$/},
+{name:"AABB",rule:/^(AABB){2,}$/},
+{name:"AAABBB",rule:/^(AAABBB)+$/},
+{name:"BLOCK",rule:/A{3,}B{3,}$/}
+]
+
+function colors(){
+ if(game==="RG")return["Red","Green"]
+ if(game==="BY")return["Blue","Yellow"]
+ return["Black","White"]
+}
+function mapAB(arr){
+ let c=colors()
+ return arr.map(x=>x===c[0]?"A":"B").join("")
+}
+
+function aiPrediction(){
+ let h=data[game].slice(-10)
+ let c=colors()
+ if(h.length<3) return {best:c[0],conf:"LOW",prob:30,reason:"INIT"}
+
+ let ab=mapAB(h)
+ for(let p of patterns){
+   if(p.rule.test(ab)){
+     let stat=patternStats[p.name]||{wins:0,total:0}
+     let acc=stat.total?Math.round(stat.wins/stat.total*100):60
+     let conf=acc>=70?"HIGH":acc>=40?"MEDIUM":"LOW"
+     return {best:c[0],conf:conf,prob:acc,reason:p.name}
+   }
+ }
+ return {best:c[0],conf:"LOW",prob:35,reason:"RANDOM"}
+}
+
+function calculateBet(conf){
+ let filter=document.getElementById("confFilter").value
+ if(filter==="HIGH" && conf!=="HIGH") return 0
+ if(filter==="MEDIUM" && conf==="LOW") return 0
+ let cap=Number(capital.value)
+ let base=Number(baseBet.value)/100
+ return Math.round(cap*base*Math.pow(1.4,consecutiveLoss))
+}
+
+function submitResult(res){
+ data[game].push(res)
+ let ai=aiPrediction()
+ let bet=calculateBet(ai.conf)
+
+ if(!patternStats[ai.reason])
+   patternStats[ai.reason]={wins:0,total:0}
+
+ patternStats[ai.reason].total++
+ let status="LOSS"
+ if(ai.best===res){
+   patternStats[ai.reason].wins++
+   consecutiveLoss=0
+   status="WIN"
+ }else consecutiveLoss++
+
+ let rowClass=ai.conf==="HIGH"?"high":ai.conf==="MEDIUM"?"medium":"low"
+ let statusClass=status==="WIN"?"win":"loss"
+
+ history.unshift(`
+<tr class="${rowClass}">
+<td>${serialNo}</td>
+<td>${new Date().toLocaleTimeString()}</td>
+<td>${game}</td>
+<td>${ai.best}</td>
+<td>${res}</td>
+<td>${ai.reason}</td>
+<td>${ai.conf}</td>
+<td>${ai.prob}%</td>
+<td class="${statusClass}">${status}</td>
+</tr>`)
+
+ history=history.slice(0,50)
+ historyEl.innerHTML=history.join("")
+ serialNo++
+ startSerial.value=serialNo
+ update()
+}
+
+function renderButtons(){
+ resultButtons.innerHTML=""
+ let c=colors()
+ c.forEach(col=>{
+   resultButtons.innerHTML+=
+   `<button class="result-btn ${col.toLowerCase()}"
+   onclick="submitResult('${col}')">${col}</button>`
+ })
+}
+
+function update(){
+ let ai=aiPrediction()
+ signal.innerText=ai.best
+ reason.innerText=ai.reason
+ confidence.innerText=ai.conf
+ probability.innerText=ai.prob+"%"
+ suggestBet.innerText=calculateBet(ai.conf)
+
+ document.querySelectorAll(".result-btn").forEach(b=>{
+   b.classList.remove("activeSignal")
+   if(b.innerText===ai.best) b.classList.add("activeSignal")
+ })
+
+ let pRows=""
+ for(let k in patternStats){
+   let s=patternStats[k]
+   let acc=Math.round(s.wins/s.total*100)
+   pRows+=`<tr><td>${k}</td><td>${acc}%</td><td>${s.wins}</td><td>${s.total}</td></tr>`
+ }
+ patternTable.innerHTML=pRows
+}
+
+function setSerial(){
+ serialNo=Number(startSerial.value)
+ alert("Serial set to "+serialNo)
+}
+
+function changeGame(){game=document.getElementById("game").value;update()}
+
+renderButtons()
+update()
+</script>
+
+</body>
+</html>
